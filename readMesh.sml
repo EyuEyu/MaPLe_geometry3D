@@ -1,8 +1,3 @@
-type Vertex = real * real * real  (* (x, y, z) coordinates *)
-type Face = int * int * int       (* Indices of three vertices forming a triangle *)
-
-type Mesh = { vertices : Vertex list, faces : Face list }
-
 fun vertexToString (x, y, z) =
     "(" ^ Real.toString x ^ ", " ^ Real.toString y ^ ", " ^ Real.toString z ^ ")"
 
@@ -69,6 +64,10 @@ fun read_triangle_mesh filename =
                     (case parse_face line of
                         SOME f => loop rest (vs, f::fs)
                       | NONE => loop rest (vs, fs)))
+        
+        val { vertices = v, faces = f } = loop lines ([], [])
+        val vertices_seq = Seq.fromList v
+        val faces_seq = Seq.fromList f
     in
-        loop lines ([], [])
+        { vertices = vertices_seq, faces = faces_seq }
     end
