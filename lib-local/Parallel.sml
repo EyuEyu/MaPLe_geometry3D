@@ -2,7 +2,7 @@ structure Parallel:
 sig
   val parfor: int * int -> (int -> unit) -> unit
 
-  val tabulate: (int * int) -> (int -> 'a) -> 'a array
+  val tabulate: (int * int) -> (int -> 'a) -> 'a Seq.t
 
   val reduce: ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
 
@@ -10,11 +10,11 @@ sig
             -> 'a
             -> (int * int)
             -> (int -> 'a)
-            -> 'a array (* length N+1, for both inclusive and exclusive scan *)
+            -> 'a Seq.t (* length N+1, for both inclusive and exclusive scan *)
 
-  val filter: (int * int) -> (int -> 'a) -> (int -> bool) -> 'a array
+  val filter: (int * int) -> (int -> 'a) -> (int -> bool) -> 'a Seq.t
 
-  val tabFilter: (int * int) -> (int -> 'a option) -> 'a array
+  val tabFilter: (int * int) -> (int -> 'a option) -> 'a Seq.t
 end =
 struct
 
@@ -62,7 +62,7 @@ struct
   val allocate = ForkJoin.alloc
 
 
-  fun tabulate (lo, hi) f =
+  fun tabulate_ (lo, hi) f =
     let
       val n = hi - lo
       val result = allocate n
@@ -113,7 +113,7 @@ struct
     end
 
 
-  fun scan g b (lo, hi) (f: int -> 'a) =
+  fun scan_ g b (lo, hi) (f: int -> 'a) =
     if hi - lo <= block_size then
       let
         val n = hi - lo
@@ -130,11 +130,11 @@ struct
         val n = hi - lo
         val k = block_size
         val m = 1 + (n - 1) div k (* number of blocks *)
-        val sums = tabulate (0, m) (fn i =>
+        val sums = tabulate_ (0, m) (fn i =>
           let val start = lo + i * k
           in reduce g b (start, Int.min (start + k, hi)) f
           end)
-        val partials = scan g b (0, m) (nth sums)
+        val partials = scan_ g b (0, m) (nth sums)
         val result = allocate (n + 1)
       in
         parfor (0, m) (fn i =>
@@ -152,19 +152,19 @@ struct
       end
 
 
-  fun filter (lo, hi) f g =
+  fun filter_ (lo, hi) f g =
     let
       val n = hi - lo
       val k = block_size
       val m = 1 + (n - 1) div k (* number of blocks *)
-      val counts = tabulate (0, m) (fn i =>
+      val counts = tabulate_ (0, m) (fn i =>
         let
           val start = lo + i * k
         in
           reduce op+ 0 (start, Int.min (start + k, hi)) (fn j =>
             if g j then 1 else 0)
         end)
-      val offsets = scan op+ 0 (0, m) (nth counts)
+      val offsets = scan_ op+ 0 (0, m) (nth counts)
       val result = allocate (nth offsets m)
       fun filterSeq (i, j) c =
         if i >= j then ()
@@ -179,7 +179,7 @@ struct
     end
 
 
-  fun tabFilter (lo, hi) (f: int -> 'a option) =
+  fun tabFilter_ (lo, hi) (f: int -> 'a option) =
     let
       val n = hi - lo
       val k = block_size
@@ -194,7 +194,7 @@ struct
             NONE => filterSeq (i + 1, j, k)
           | SOME v => (A.update (tmp, k, v); filterSeq (i + 1, j, k + 1))
 
-      val counts = tabulate (0, m) (fn i =>
+      val counts = tabulate_ (0, m) (fn i =>
         let
           val last = filterSeq
             (lo + i * k, lo + Int.min ((i + 1) * k, n), i * k)
@@ -202,7 +202,7 @@ struct
           last - i * k
         end)
 
-      val outOff = scan op+ 0 (0, m) (fn i => A.sub (counts, i))
+      val outOff = scan_ op+ 0 (0, m) (fn i => A.sub (counts, i))
       val outSize = A.sub (outOff, m)
 
       val result = allocate outSize
@@ -218,5 +218,16 @@ struct
         end);
       result
     end
+
+
+  fun tabulate (lo, hi) f =
+    ArraySlice.full (tabulate_ (lo, hi) f)
+  fun scan g z (lo, hi) f =
+    ArraySlice.full (scan_ g z (lo, hi) f)
+  fun filter (lo, hi) f g =
+    ArraySlice.full (filter_ (lo, hi) f g)
+  fun tabFilter (lo, hi) f =
+    ArraySlice.full (tabFilter_ (lo, hi) f)
+
 
 end
