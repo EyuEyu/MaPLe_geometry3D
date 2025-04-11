@@ -1,14 +1,13 @@
 val _ =
   let
-    val mesh = read_triangle_mesh "./sphere.obj"
-    val v = #vertices mesh
-    val f = #faces mesh
+    val (v, f) = read_triangle_mesh "./sphere.obj"
     
     val ns = Geometry3D.per_face_normals v f
+    val nv = Geometry3D.per_vertex_normals v f
     
-
-
   in
-    print(Seq.length ns)
+    print(Geometry3D.Vector.vectorToString (Seq.nth nv 0) ^ "\n ");
+    print(Geometry3D.Vector.vectorToString (Seq.nth nv 1) ^ "\n ");
+    print(Geometry3D.Vector.vectorToString (Seq.nth nv 381) ^ "\n ")
     
   end

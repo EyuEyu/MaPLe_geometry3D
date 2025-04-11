@@ -56,7 +56,7 @@ fun read_triangle_mesh filename =
         val _ = TextIO.closeIn file
         val lines = List.map trim (String.fields (fn c => c = #"\n") content)
 
-        fun loop [] (vs, fs) = { vertices = rev vs, faces = rev fs }
+        fun loop [] (vs, fs) = (rev vs, rev fs)
           | loop (line::rest) (vs, fs) =
                 (case parse_vertex line of
                     SOME v => loop rest (v::vs, fs)
@@ -65,9 +65,9 @@ fun read_triangle_mesh filename =
                         SOME f => loop rest (vs, f::fs)
                       | NONE => loop rest (vs, fs)))
         
-        val { vertices = v, faces = f } = loop lines ([], [])
+        val (v, f) = loop lines ([], [])
         val vertices_seq = Seq.fromList v
         val faces_seq = Seq.fromList f
     in
-        { vertices = vertices_seq, faces = faces_seq }
+        (vertices_seq, faces_seq)
     end
