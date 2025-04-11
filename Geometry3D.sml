@@ -30,14 +30,50 @@ struct
         in
             if (Real.== (len, 0.0)) then (0.0, 0.0, 0.0)
             else (x / len, y / len, z/ len)
-        end    
+        end
+
+      fun triangleArea (v1 : t) (v2 : t) (v3 : t) : real = 
+        (length (cross (sub v2 v1) (sub v3 v1))) / 2.0
+
+      fun angle_v1 (v1 : t) (v2 : t) (v3 : t) : real = 
+        let
+          val u = sub v2 v1
+          val v = sub v3 v1
+          val cos_theta = (dot u v) / ((length u) * (length v))
+          val modifier = Real.min(1.0, Real.max(~1.0, cos_theta))
+        in
+          Math.acos(modifier)
+        end
+      
+      fun voronoi_areas_v1 (v1 : t) (v2 : t) (v3 : t) : real = 
+        let
+          val a = angle_v1 v1 v2 v3
+          val b = angle_v1 v2 v3 v1
+          val c = angle_v1 v3 v1 v2
+        in
+          if a > Math.pi / 2.0 then
+            (triangleArea v1 v2 v3) / 2.0
+          else if b > Math.pi / 2.0 orelse c > Math.pi / 2.0 then
+            (triangleArea v1 v2 v3) / 4.0
+          else
+            let
+              val len_ba = length (sub v2 v1)
+              val len_ca = length (sub v3 v1)
+            in
+              (len_ba * len_ba * (1.0 / Math.tan(c)) + len_ca * len_ca * (1.0 / Math.tan(b))) / 8.0
+            end
+        end
+      
+      fun barycentric_areas_v1 (v1 : t) (v2 : t) (v3 : t) : real = 
+        (triangleArea v1 v2 v3) / 3.0
+
     end
 
     fun loop i stop acc f = 
       if i >= stop then acc
       else
         let 
-          val acc2 = f (i, acc)
+          val acc2 = f i acc
         in
           loop (i + 1) stop acc2 f
         end
@@ -76,7 +112,7 @@ struct
           let
             val nf = Seq.length f
 
-            val weight : Vector.t = loop 0 nf (0.0, 0.0, 0.0) (fn (i, ww) => 
+            val weight : Vector.t = loop 0 nf (0.0, 0.0, 0.0) (fn i => fn ww => 
               let
                 val (v1, v2, v3) = Seq.nth f i
               in
@@ -93,5 +129,39 @@ struct
       in
         Parallel.tabulate (0, n) (fn i => do_vertex_normal i v f face_normals)
       end
+    
+    fun mass v f =
+      let 
+        val n = Seq.length v
+
+        fun do_mass idx v f = 
+          let
+            val nf = Seq.length f
+
+            val weight : real = loop 0 nf 0.0 (fn i => fn ww => 
+              let
+                val (i1, i2, i3) = Seq.nth f i
+                val v1 = Seq.nth v i1
+                val v2 = Seq.nth v i2
+                val v3 = Seq.nth v i3
+              in
+                if (i1 = idx) then
+                  ww + (Vector.voronoi_areas_v1 v1 v2 v3)
+                else if (i2 = idx) then
+                  ww + (Vector.voronoi_areas_v1 v2 v3 v1)
+                else if (i3 = idx) then
+                  ww + (Vector.voronoi_areas_v1 v3 v1 v2)
+                else
+                  ww
+              end
+            )
+          in 
+            weight
+          end
+      in
+        Parallel.tabulate (0, n) (fn i => do_mass i v f)
+      end
+    
+
 
 end
