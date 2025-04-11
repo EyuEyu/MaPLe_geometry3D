@@ -58,3 +58,10 @@ fun compute_voronoi_areas (vertices: vec3 list, faces: face list) : real list =
     List.app process_face faces;
     Array.foldr (op ::) [] init
   end
+
+structure M = MatCOO(structure I = Int32
+                        structure R = Real32)
+
+
+val m =
+  M.Mat {width =10, height=5, row_indices=Seq.tabulate}
