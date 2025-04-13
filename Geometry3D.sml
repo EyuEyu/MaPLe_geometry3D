@@ -133,10 +133,11 @@ struct
     fun mass v f =
       let 
         val n = Seq.length v
-
+        val nf = Seq.length f
+        
         fun do_mass idx v f = 
           let
-            val nf = Seq.length f
+            
 
             val weight : real = loop 0 nf 0.0 (fn i => fn ww => 
               let
