@@ -86,40 +86,24 @@ struct
           loop (i + 1) stop acc2 f
         end
 
-    fun atomic_combine_with f (arr, i) x =
+    fun atomic_array_update f (arr, i) x is_equal =
       let
         fun loop current =
           let
             val desired = f (current, x)
           in
-            if desired = current then
+            if is_equal(desired, current) then
               ()
             else
               let
                 val current' =
                   MLton.Parallel.arrayCompareAndSwap (arr, i) (current, desired)
               in
-                if current' = current then () else loop current'
+                if is_equal(current', current) then () else loop current'
               end
           end
       in
         loop (Array.sub (arr, i))
-      end
-    
-    fun atomic_array_update f (arr, locks, i) x = 
-      let    
-        fun loop locked =
-          let
-            val locked' =
-              MLton.Parallel.arrayCompareAndSwap (locks, i) (locked, false)
-          in
-            if not locked then
-              Array.update (arr, i, f (Array.sub (arr, i), x))
-            else 
-              loop locked'
-          end
-      in
-        loop (Array.sub (locks, i))
       end
 
     fun per_face_normals v f =
@@ -210,11 +194,9 @@ struct
         val nv = Seq.length v
         val nf = Seq.length f
         val result = ForkJoin.alloc nv
-        val locks = ForkJoin.alloc nv
         
       in
-        (* parallelly initialize all locks and elements in result to 0.0 *)
-        Parallel.parfor (0, nv) (fn i => Array.update (locks, i, false));
+        (* parallelly initialize all elements in result to 0.0 *)
         Parallel.parfor (0, nv) (fn i => Array.update (result, i, 0.0)); 
 
         (* parallelly calculate mass based on each face *)
@@ -225,8 +207,12 @@ struct
             val v2 = Seq.nth v i2
             val v3 = Seq.nth v i3
           in
-            atomic_array_update (op+) (result, locks, i1) (Vector.voronoi_areas_v1 v1 v2 v3)
-            (* atomic_combine_with (op+) (result, i1) (Vector.voronoi_areas_v1 v1 v2 v3) *)
+            ForkJoin.par(fn () => atomic_array_update Real.+ (result, i1) (Vector.voronoi_areas_v1 v1 v2 v3) Real.==,
+                         fn () => ForkJoin.par(
+                            fn () => atomic_array_update Real.+ (result, i2) (Vector.voronoi_areas_v1 v2 v3 v1) Real.==,
+                            fn () => atomic_array_update Real.+ (result, i3) (Vector.voronoi_areas_v1 v3 v1 v2) Real.==
+                            ));
+            ()
           end
         );
 
@@ -250,7 +236,9 @@ struct
             val v2 = Seq.nth v i2
             val v3 = Seq.nth v i3
           in
-            Array.update (result, i1, Array.sub (result, i1) + (Vector.voronoi_areas_v1 v1 v2 v3))
+            Array.update (result, i1, Array.sub (result, i1) + (Vector.voronoi_areas_v1 v1 v2 v3));
+            Array.update (result, i2, Array.sub (result, i2) + (Vector.voronoi_areas_v1 v2 v3 v1));
+            Array.update (result, i3, Array.sub (result, i3) + (Vector.voronoi_areas_v1 v3 v1 v2))
           end
         );
         Parallel.tabulate (0, nv) (fn i => Array.sub (result, i))
