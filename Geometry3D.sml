@@ -216,7 +216,8 @@ struct
           end
         );
 
-        Parallel.tabulate (0, nv) (fn i => Array.sub (result, i))
+        (* Array to sequence *)
+        ArraySlice.full result
       end
 
     fun mass_seq v f = 
@@ -241,6 +242,8 @@ struct
             Array.update (result, i3, Array.sub (result, i3) + (Vector.voronoi_areas_v1 v3 v1 v2))
           end
         );
-        Parallel.tabulate (0, nv) (fn i => Array.sub (result, i))
+        
+        (* Array to sequence *)
+        ArraySlice.full result
       end
 end
