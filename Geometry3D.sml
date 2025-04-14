@@ -69,6 +69,14 @@ struct
 
     end
 
+    fun forloop(i, stop, foo) =
+      if i >= stop then
+        ()   (* done *)
+      else
+        ( foo(i)                 (* do something at the current index, i *)
+        ; forloop(i+1, stop, foo)   (* and then continue the loop at index i+1 *)
+        )
+
     fun loop i stop acc f = 
       if i >= stop then acc
       else
@@ -77,6 +85,42 @@ struct
         in
           loop (i + 1) stop acc2 f
         end
+
+    fun atomic_combine_with f (arr, i) x =
+      let
+        fun loop current =
+          let
+            val desired = f (current, x)
+          in
+            if desired = current then
+              ()
+            else
+              let
+                val current' =
+                  MLton.Parallel.arrayCompareAndSwap (arr, i) (current, desired)
+              in
+                if current' = current then () else loop current'
+              end
+          end
+      in
+        loop (Array.sub (arr, i))
+      end
+    
+    fun atomic_array_update f (arr, locks, i) x = 
+      let    
+        fun loop locked =
+          let
+            val locked' =
+              MLton.Parallel.arrayCompareAndSwap (locks, i) (locked, false)
+          in
+            if not locked then
+              Array.update (arr, i, f (Array.sub (arr, i), x))
+            else 
+              loop locked'
+          end
+      in
+        loop (Array.sub (locks, i))
+      end
 
     fun per_face_normals v f =
       let 
@@ -134,11 +178,9 @@ struct
       let 
         val n = Seq.length v
         val nf = Seq.length f
-        
+
         fun do_mass idx v f = 
           let
-            
-
             val weight : real = loop 0 nf 0.0 (fn i => fn ww => 
               let
                 val (i1, i2, i3) = Seq.nth f i
@@ -163,6 +205,54 @@ struct
         Parallel.tabulate (0, n) (fn i => do_mass i v f)
       end
     
+    fun mass_atomic v f = 
+      let
+        val nv = Seq.length v
+        val nf = Seq.length f
+        val result = ForkJoin.alloc nv
+        val locks = ForkJoin.alloc nv
+        
+      in
+        (* parallelly initialize all locks and elements in result to 0.0 *)
+        Parallel.parfor (0, nv) (fn i => Array.update (locks, i, false));
+        Parallel.parfor (0, nv) (fn i => Array.update (result, i, 0.0)); 
 
+        (* parallelly calculate mass based on each face *)
+        Parallel.parfor (0, nf) (fn i =>
+          let
+            val (i1, i2, i3) = Seq.nth f i
+            val v1 = Seq.nth v i1
+            val v2 = Seq.nth v i2
+            val v3 = Seq.nth v i3
+          in
+            atomic_array_update (op+) (result, locks, i1) (Vector.voronoi_areas_v1 v1 v2 v3)
+            (* atomic_combine_with (op+) (result, i1) (Vector.voronoi_areas_v1 v1 v2 v3) *)
+          end
+        );
 
+        Parallel.tabulate (0, nv) (fn i => Array.sub (result, i))
+      end
+
+    fun mass_seq v f = 
+      let
+        val nv = Seq.length v
+        val nf = Seq.length f
+        val result = ForkJoin.alloc nv
+        
+      in
+        (* initialize all locks and elements in result to 0.0 *)
+        forloop (0, nv, fn i => Array.update (result, i, 0.0)); 
+        (* calculate mass based on each face *)
+        forloop (0, nf, fn i =>
+          let
+            val (i1, i2, i3) = Seq.nth f i
+            val v1 = Seq.nth v i1
+            val v2 = Seq.nth v i2
+            val v3 = Seq.nth v i3
+          in
+            Array.update (result, i1, Array.sub (result, i1) + (Vector.voronoi_areas_v1 v1 v2 v3))
+          end
+        );
+        Parallel.tabulate (0, nv) (fn i => Array.sub (result, i))
+      end
 end
