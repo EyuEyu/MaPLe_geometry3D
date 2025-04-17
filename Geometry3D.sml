@@ -69,6 +69,14 @@ struct
 
     end
 
+    fun forloop(i, stop, foo) =
+      if i >= stop then
+        ()   (* done *)
+      else
+        ( foo(i)                 (* do something at the current index, i *)
+        ; forloop(i+1, stop, foo)   (* and then continue the loop at index i+1 *)
+        )
+
     fun loop i stop acc f = 
       if i >= stop then acc
       else
@@ -77,6 +85,26 @@ struct
         in
           loop (i + 1) stop acc2 f
         end
+
+    fun atomic_array_update f (arr, i) x is_equal =
+      let
+        fun loop current =
+          let
+            val desired = f (current, x)
+          in
+            if is_equal(desired, current) then
+              ()
+            else
+              let
+                val current' =
+                  MLton.Parallel.arrayCompareAndSwap (arr, i) (current, desired)
+              in
+                if is_equal(current', current) then () else loop current'
+              end
+          end
+      in
+        loop (Array.sub (arr, i))
+      end
 
     fun per_face_normals v f =
       let 
@@ -133,11 +161,10 @@ struct
     fun mass v f =
       let 
         val n = Seq.length v
+        val nf = Seq.length f
 
         fun do_mass idx v f = 
           let
-            val nf = Seq.length f
-
             val weight : real = loop 0 nf 0.0 (fn i => fn ww => 
               let
                 val (i1, i2, i3) = Seq.nth f i
@@ -162,6 +189,61 @@ struct
         Parallel.tabulate (0, n) (fn i => do_mass i v f)
       end
     
+    fun mass_atomic v f = 
+      let
+        val nv = Seq.length v
+        val nf = Seq.length f
+        val result = ForkJoin.alloc nv
+        
+      in
+        (* parallelly initialize all elements in result to 0.0 *)
+        Parallel.parfor (0, nv) (fn i => Array.update (result, i, 0.0)); 
 
+        (* parallelly calculate mass based on each face *)
+        Parallel.parfor (0, nf) (fn i =>
+          let
+            val (i1, i2, i3) = Seq.nth f i
+            val v1 = Seq.nth v i1
+            val v2 = Seq.nth v i2
+            val v3 = Seq.nth v i3
+          in
+            ForkJoin.par(fn () => atomic_array_update Real.+ (result, i1) (Vector.voronoi_areas_v1 v1 v2 v3) Real.==,
+                         fn () => ForkJoin.par(
+                            fn () => atomic_array_update Real.+ (result, i2) (Vector.voronoi_areas_v1 v2 v3 v1) Real.==,
+                            fn () => atomic_array_update Real.+ (result, i3) (Vector.voronoi_areas_v1 v3 v1 v2) Real.==
+                            ));
+            ()
+          end
+        );
 
+        (* Array to sequence *)
+        ArraySlice.full result
+      end
+
+    fun mass_seq v f = 
+      let
+        val nv = Seq.length v
+        val nf = Seq.length f
+        val result = ForkJoin.alloc nv
+        
+      in
+        (* initialize all locks and elements in result to 0.0 *)
+        forloop (0, nv, fn i => Array.update (result, i, 0.0)); 
+        (* calculate mass based on each face *)
+        forloop (0, nf, fn i =>
+          let
+            val (i1, i2, i3) = Seq.nth f i
+            val v1 = Seq.nth v i1
+            val v2 = Seq.nth v i2
+            val v3 = Seq.nth v i3
+          in
+            Array.update (result, i1, Array.sub (result, i1) + (Vector.voronoi_areas_v1 v1 v2 v3));
+            Array.update (result, i2, Array.sub (result, i2) + (Vector.voronoi_areas_v1 v2 v3 v1));
+            Array.update (result, i3, Array.sub (result, i3) + (Vector.voronoi_areas_v1 v3 v1 v2))
+          end
+        );
+        
+        (* Array to sequence *)
+        ArraySlice.full result
+      end
 end
