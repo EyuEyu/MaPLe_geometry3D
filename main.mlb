@@ -1,5 +1,6 @@
 lib/github.com/mpllang/mpllib/sources.mpl.mlb
 lib-local/sources.mpl.mlb
 Geometry3D.sml
+MGL.sml
 readMesh.sml
 main.sml
