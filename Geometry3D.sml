@@ -66,6 +66,10 @@ struct
       
       fun barycentric_areas_v1 (v1 : t) (v2 : t) (v3 : t) : real = 
         (triangleArea v1 v2 v3) / 3.0
+
+      fun cotangent (v1 : t) (v2 : t) : real = 
+        (dot v1 v2) / (2.0 * (length (cross v1 v2) ) )
+
     end
 
 end
