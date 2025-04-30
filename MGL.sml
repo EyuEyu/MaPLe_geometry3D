@@ -12,9 +12,10 @@ sig
   val mass               : Vertex Seq.t -> Face Seq.t -> real Seq.t
   val mass_atomic        : Vertex Seq.t -> Face Seq.t -> real Seq.t
   val cotmatrix_entries  : Vertex Seq.t -> Face Seq.t -> (real * real * real) Seq.t
-  val cot_triplet_array  : Vertex Seq.t -> Face Seq.t -> (int * int * real) Seq.t
-
+  val cot_triplet_array_draft: Vertex Seq.t -> Face Seq.t -> (int * int * real) Seq.t
+  val cot_triplet_array  : Vertex Seq.t -> Face Seq.t -> ((int * int) * real) Seq.t
   val test1              : (int * int * real) Seq.t -> real
+  val test2              : ((int * int) * real) Seq.t -> real
 
   (*val cotmatrix          : Vertex Seq.t -> Face Seq.t -> MatCoo*)
 
@@ -185,7 +186,7 @@ struct
       ArraySlice.full (SeqBasis.tabulate 5 (0, n) (fn i => do_face_cot i v f))
     end
   
-  fun cot_triplet_array v f =
+  fun cot_triplet_array_draft v f =
     let 
       val ce = cotmatrix_entries v f
       val nf = Seq.length f
@@ -217,7 +218,7 @@ struct
 
       ArraySlice.full arr_triplet
     end
-  
+
   fun test1 arr_triplet =
     let
       val n = Seq.length arr_triplet
@@ -225,6 +226,63 @@ struct
       SeqBasis.reduce 5 op+ 0.0 (0, n) (fn idx =>
         let
           val (i, j, v) = Seq.nth arr_triplet idx
+        in
+          if i = 0 andalso j = 0 then v else 0.0
+        end
+      )
+    end
+  
+  fun cot_triplet_array v f =
+    let 
+      val ce = cotmatrix_entries v f
+      val nf = Seq.length f
+      val nv = Seq.length v
+
+      val ht = Hashtable.make {
+        hash = fn (i, j) => i * nv + j,
+        eq = fn ((i1, j1), (i2 , j2)) => i1 = i2 andalso j1 = j2,
+        capacity = 14 * nf
+      }
+      
+      fun cmp (((i1, j1), _), ((i2, j2), _)) =
+        if i1 < i2 then LESS
+        else if i1 > i2 then GREATER
+        else
+          if j1 < j2 then LESS
+          else if j1 > j2 then GREATER
+          else EQUAL
+    in
+      Parallel.parfor (0, nf) (fn i => 
+        let
+          val (v1, v2, v3) = Seq.nth f i
+          val (c1, c2, c3) = Seq.nth ce i
+        in
+          Hashtable.insert_combine ht ((v1, v2), c3) Real.+;
+          Hashtable.insert_combine ht ((v2, v1), c3) Real.+;
+          Hashtable.insert_combine ht ((v1, v1), ~c3) Real.+;
+          Hashtable.insert_combine ht ((v2, v2), ~c3) Real.+;
+
+          Hashtable.insert_combine ht ((v2, v3), c1) Real.+;
+          Hashtable.insert_combine ht ((v3, v2), c1) Real.+;
+          Hashtable.insert_combine ht ((v2, v2), ~c1) Real.+;
+          Hashtable.insert_combine ht ((v3, v3), ~c1) Real.+;
+
+          Hashtable.insert_combine ht ((v3, v1), c2) Real.+;
+          Hashtable.insert_combine ht ((v1, v3), c2) Real.+;
+          Hashtable.insert_combine ht ((v3, v3), ~c2) Real.+;
+          Hashtable.insert_combine ht ((v1, v1), ~c2) Real.+
+        end
+      );      
+      Mergesort.sort cmp (Hashtable.to_seq ht)
+    end
+
+  fun test2 arr_triplet =
+    let
+      val n = Seq.length arr_triplet
+    in
+      SeqBasis.reduce 5 op+ 0.0 (0, n) (fn idx =>
+        let
+          val ((i, j), v) = Seq.nth arr_triplet idx
         in
           if i = 0 andalso j = 0 then v else 0.0
         end

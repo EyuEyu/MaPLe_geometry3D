@@ -5,10 +5,13 @@ sig
 
   val make: {hash: 'a -> int, eq: 'a * 'a -> bool, capacity: int} -> ('a, 'b) t
   val insert: ('a, 'b) t -> ('a * 'b) -> unit
+  val insert_combine: ('a, 'b) t -> ('a * 'b) -> (('b * 'b) -> 'b)-> unit
   val insert_if_absent: ('a, 'b) t -> ('a * 'b) -> unit
 
   val lookup: ('a, 'b) t -> 'a -> 'b option
   val to_list: ('a, 'b) t -> ('a * 'b) list
+  val to_seq: ('a, 'b) t -> ('a * 'b) Seq.t
+  val to_arr: ('a, 'b) t -> ('a * 'b) array
   val keys_to_arr: ('a, 'b) t -> 'a array
 end =
 struct
@@ -48,6 +51,32 @@ struct
           if not rightPlace then
             loop (i+1)
           else if bcas (data, i) (current, SOME (k, v)) then
+            ()
+          else
+            loop i
+        end
+
+      val start = (hash k) mod (Array.length data)
+    in
+      loop start
+    end
+
+  fun insert_combine (S {data, hash, eq}) (k, v) combine =
+    let
+      val n = Array.length data
+
+      fun loop i =
+        if i >= n then loop 0 else
+        let
+          val current = Array.sub (data, i)
+          val (rightPlace, new_v) =
+            case current of
+              NONE => (true, v)
+            | SOME (k', v') => (eq (k, k'), combine(v', v))
+        in
+          if not rightPlace then
+            loop (i+1)
+          else if bcas (data, i) (current, SOME (k, new_v)) then
             ()
           else
             loop i
@@ -124,4 +153,10 @@ struct
       Array.foldr pushSome [] data
     end
 
+
+  fun to_arr (S {data, hash, eq}) = 
+    SeqBasis.tabFilter 5 (0, Array.length data) (fn i => Array.sub (data, i))
+
+  fun to_seq (S {data, hash, eq}) = 
+    ArraySlice.full (to_arr (S {data=data, hash=hash, eq=eq}))   
 end
