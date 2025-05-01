@@ -9,11 +9,10 @@ val _ =
     val mass = MGL.mass v f
     val mass_atomic = MGL.mass_atomic v f
     val ce = MGL.cotmatrix_entries v f
-    val cea = MGL.cot_triplet_array_draft v f
-    val cea2 = MGL.cot_triplet_array v f
-    val test = MGL.test1 cea
-    val test2 = MGL.test2 cea2
-    
+    val cot = MGL.cotmatrix v f
+  
+    val s1 = Benchmark.run (fn _ => MGL.mass_atomic v f)
+
   in
     (*
     print(Geometry3D.Vector.toString (Seq.nth ns 0) ^ "\n");
