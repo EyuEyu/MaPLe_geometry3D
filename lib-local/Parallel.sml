@@ -2,6 +2,8 @@ structure Parallel:
 sig
   val parfor: int * int -> (int -> unit) -> unit
 
+  val parforg: int -> int * int -> (int -> unit) -> unit
+
   val tabulate: (int * int) -> (int -> 'a) -> 'a Seq.t
 
   val reduce: ('a * 'a -> 'a) -> 'a -> (int * int) -> (int -> 'a) -> 'a
@@ -50,6 +52,26 @@ struct
         end
     in
       if hi - lo <= grain then Util.for (lo, hi) f
+      else loopSplit (i2w lo) (i2w hi)
+    end
+  
+  fun parforg g (lo, hi) f =
+    let
+      val wgrain = i2w g
+
+      fun loopCheck lo hi =
+        if hi - lo <= wgrain then for (lo, hi) f else loopSplit lo hi
+
+      and loopSplit lo hi =
+        let
+          val half = Word64.>> (hi - lo, 0w1)
+          val mid = lo + half
+        in
+          ForkJoin.par (fn _ => loopCheck lo mid, fn _ => loopCheck mid hi);
+          ()
+        end
+    in
+      if hi - lo <= g then Util.for (lo, hi) f
       else loopSplit (i2w lo) (i2w hi)
     end
 

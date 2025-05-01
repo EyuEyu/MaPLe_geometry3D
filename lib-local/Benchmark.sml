@@ -72,10 +72,10 @@ struct
            (List.tl tms))
     in
       print "\n";
-      print ("average " ^ Real.fmt (StringCvt.FIX (SOME 4)) avg ^ "s\n");
-      print ("minimum " ^ Real.fmt (StringCvt.FIX (SOME 4)) tmin ^ "s\n");
-      print ("maximum " ^ Real.fmt (StringCvt.FIX (SOME 4)) tmax ^ "s\n");
-      print ("std dev " ^ Real.fmt (StringCvt.FIX (SOME 4)) std ^ "s\n");
+      print ("average " ^ Real.fmt (StringCvt.FIX (SOME 8)) avg ^ "s\n");
+      print ("minimum " ^ Real.fmt (StringCvt.FIX (SOME 8)) tmin ^ "s\n");
+      print ("maximum " ^ Real.fmt (StringCvt.FIX (SOME 8)) tmax ^ "s\n");
+      print ("std dev " ^ Real.fmt (StringCvt.FIX (SOME 8)) std ^ "s\n");
       result
     end
 

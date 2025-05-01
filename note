@@ -63,3 +63,36 @@ fun mass_seq v f =
     (* Array to sequence *)
     ArraySlice.full result
   end
+
+    fun cot_triplet_array_draft v f =
+    let 
+      val ce = cotmatrix_entries v f
+      val nf = Seq.length f
+      val n_triplet = nf * 12
+      val arr_triplet = ForkJoin.alloc n_triplet
+    in
+      Parallel.parforg 256 (0, nf) (fn i => 
+        let
+          val offset = 12 * i;
+          val (v1, v2, v3) = Seq.nth f i
+          val (c1, c2, c3) = Seq.nth ce i
+        in
+          Array.update (arr_triplet, offset,      (v1, v2,  c3));
+          Array.update (arr_triplet, offset + 1,  (v2, v1,  c3));
+          Array.update (arr_triplet, offset + 2,  (v1, v1, ~c3));
+          Array.update (arr_triplet, offset + 3,  (v2, v2, ~c3));
+
+          Array.update (arr_triplet, offset + 4,  (v2, v3,  c1));
+          Array.update (arr_triplet, offset + 5,  (v3, v2,  c1));
+          Array.update (arr_triplet, offset + 6,  (v2, v2, ~c1));
+          Array.update (arr_triplet, offset + 7,  (v3, v3, ~c1));
+
+          Array.update (arr_triplet, offset + 8,  (v3, v1,  c2));
+          Array.update (arr_triplet, offset + 9,  (v1, v3,  c2));
+          Array.update (arr_triplet, offset + 10, (v3, v3, ~c2));
+          Array.update (arr_triplet, offset + 11, (v1, v1, ~c2))
+        end
+      );
+
+      ArraySlice.full arr_triplet
+    end
