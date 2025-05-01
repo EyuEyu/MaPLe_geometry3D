@@ -8,10 +8,16 @@ struct
     structure Vector =
     struct
       type t = real * real * real
+      val zero = (0.0, 0.0, 0.0)
 
-      fun vectorToString (x, y, z) =
+      fun toString (x, y, z) =
         "(" ^ Real.toString x ^ ", " ^ Real.toString y ^ ", " ^ Real.toString z ^ ")"
 
+      fun eq_tuple_input ((x1, y1, z1), (x2, y2, z2)) : bool =
+        (Real.== (x1, x2)) andalso (Real.== (y1, y2)) andalso (Real.== (z1, z2))
+      fun add_tuple_input ((x1, y1, z1), (x2, y2, z2)) : t =
+        (x1 + x2, y1 + y2, z1 + z2)
+      
       fun add (x1, y1, z1) (x2, y2, z2) : t = (x1 + x2, y1 + y2, z1 + z2)
       fun sub (x1, y1, z1) (x2, y2, z2) : t = (x1 - x2, y1 - y2, z1 - z2)
 
