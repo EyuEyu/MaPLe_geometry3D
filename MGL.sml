@@ -5,14 +5,14 @@ sig
   type Vec = Geometry3D.Vector.t
   type MatCoo = int Seq.t * int Seq.t * real Seq.t
 
-  val per_face_normals   : Vertex Seq.t -> Face Seq.t -> Vec Seq.t
-  val per_vertex_normals : Vertex Seq.t -> Face Seq.t -> Vec Seq.t
+  val per_face_normals          : Vertex Seq.t -> Face Seq.t -> Vec Seq.t
+  val per_vertex_normals        : Vertex Seq.t -> Face Seq.t -> Vec Seq.t
   val per_vertex_normals_atomic : Vertex Seq.t -> Face Seq.t -> Vec Seq.t
-  val mass               : Vertex Seq.t -> Face Seq.t -> real Seq.t
-  val mass_atomic        : Vertex Seq.t -> Face Seq.t -> real Seq.t
-  val cotmatrix_entries  : Vertex Seq.t -> Face Seq.t -> (real * real * real) Seq.t
-  val cot_triplet_array  : Vertex Seq.t -> Face Seq.t -> ((int * int) * real) Seq.t
-  val cotmatrix          : Vertex Seq.t -> Face Seq.t -> MatCoo
+  val mass                      : Vertex Seq.t -> Face Seq.t -> real Seq.t
+  val mass_atomic               : Vertex Seq.t -> Face Seq.t -> real Seq.t
+  val cotmatrix_entries         : Vertex Seq.t -> Face Seq.t -> (real * real * real) Seq.t
+  val cot_triplet_array         : Vertex Seq.t -> Face Seq.t -> ((int * int) * real) Seq.t
+  val cotmatrix                 : Vertex Seq.t -> Face Seq.t -> MatCoo
 
 end =
 struct
@@ -112,8 +112,8 @@ struct
       val face_normals = per_face_normals v f
       val result = ForkJoin.alloc nv
     in 
-      Parallel.parfor (0, nv) (fn i => Array.update (result, i, Vector.zero));
-      Parallel.parfor (0, nf) (fn i =>
+      Parallel.parforg 64 (0, nv) (fn i => Array.update (result, i, Vector.zero));
+      Parallel.parforg 64 (0, nf) (fn i =>
         let
           val normal = Seq.nth face_normals i
           val (i1, i2, i3) = Seq.nth f i
@@ -126,7 +126,7 @@ struct
           atomic_array_update Vector.add_tuple_input (result, i3) normal Vector.eq_tuple_input
         end
       );
-      Parallel.parfor (0, nv) (fn i =>
+      Parallel.parforg 64 (0, nv) (fn i =>
         Array.update (result, i , Vector.normalize (Array.sub(result, i)))
       );
       ArraySlice.full result
