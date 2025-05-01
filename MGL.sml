@@ -5,8 +5,6 @@ sig
   type Vec = Geometry3D.Vector.t
   type MatCoo = int Seq.t * int Seq.t * real Seq.t
 
-  val loop : int -> int -> 'a -> (int -> 'a -> 'a) -> 'a
-
   val per_face_normals   : Vertex Seq.t -> Face Seq.t -> Vec Seq.t
   val per_vertex_normals : Vertex Seq.t -> Face Seq.t -> Vec Seq.t
   val per_vertex_normals_atomic : Vertex Seq.t -> Face Seq.t -> Vec Seq.t
@@ -14,8 +12,7 @@ sig
   val mass_atomic        : Vertex Seq.t -> Face Seq.t -> real Seq.t
   val cotmatrix_entries  : Vertex Seq.t -> Face Seq.t -> (real * real * real) Seq.t
   val cot_triplet_array  : Vertex Seq.t -> Face Seq.t -> ((int * int) * real) Seq.t
-
-  (*val cotmatrix          : Vertex Seq.t -> Face Seq.t -> MatCoo*)
+  val cotmatrix          : Vertex Seq.t -> Face Seq.t -> MatCoo
 
 end =
 struct
@@ -211,39 +208,6 @@ struct
       ArraySlice.full (SeqBasis.tabulate 256 (0, n) (fn i => do_face_cot i v f))
     end
   
-  fun cot_triplet_array_draft v f =
-    let 
-      val ce = cotmatrix_entries v f
-      val nf = Seq.length f
-      val n_triplet = nf * 12
-      val arr_triplet = ForkJoin.alloc n_triplet
-    in
-      Parallel.parforg 256 (0, nf) (fn i => 
-        let
-          val offset = 12 * i;
-          val (v1, v2, v3) = Seq.nth f i
-          val (c1, c2, c3) = Seq.nth ce i
-        in
-          Array.update (arr_triplet, offset,      (v1, v2,  c3));
-          Array.update (arr_triplet, offset + 1,  (v2, v1,  c3));
-          Array.update (arr_triplet, offset + 2,  (v1, v1, ~c3));
-          Array.update (arr_triplet, offset + 3,  (v2, v2, ~c3));
-
-          Array.update (arr_triplet, offset + 4,  (v2, v3,  c1));
-          Array.update (arr_triplet, offset + 5,  (v3, v2,  c1));
-          Array.update (arr_triplet, offset + 6,  (v2, v2, ~c1));
-          Array.update (arr_triplet, offset + 7,  (v3, v3, ~c1));
-
-          Array.update (arr_triplet, offset + 8,  (v3, v1,  c2));
-          Array.update (arr_triplet, offset + 9,  (v1, v3,  c2));
-          Array.update (arr_triplet, offset + 10, (v3, v3, ~c2));
-          Array.update (arr_triplet, offset + 11, (v1, v1, ~c2))
-        end
-      );
-
-      ArraySlice.full arr_triplet
-    end
-  
   fun cot_triplet_array v f =
     let 
       val ce = cotmatrix_entries v f
@@ -285,7 +249,9 @@ struct
           Hashtable.insert_combine ht ((v1, v1), ~c2) Real.+
         end
       );      
+
       Mergesort.sort cmp (Hashtable.to_seq ht)
+
     end
 
   fun cotmatrix v f = 
@@ -296,30 +262,7 @@ struct
       val j_seq = ForkJoin.alloc n
       val v_seq = ForkJoin.alloc n
     in
-      Parallel.parforg 256 (0, n) (fn k => 
-        let
-          val triplet = Seq.nth cot_array k
-          val (i, j) = #1 triplet
-          val v      = #2 triplet
-        in
-          Array.update (i_seq, k, i);
-          Array.update (j_seq, k, j);
-          Array.update (v_seq, k, v)
-        end
-      );
-
-      (ArraySlice.full i_seq, ArraySlice.full j_seq, ArraySlice.full v_seq)
-    end
-
-  fun cotmatrix v f = 
-    let 
-      val cot_array = cot_triplet_array v f
-      val n = Seq.length cot_array
-      val i_seq = ForkJoin.alloc n
-      val j_seq = ForkJoin.alloc n
-      val v_seq = ForkJoin.alloc n
-    in
-      Parallel.parforg 256 (0, n) (fn k => 
+      Parallel.parfor (0, n) (fn k => 
         let
           val triplet = Seq.nth cot_array k
           val (i, j) = #1 triplet
