@@ -17,7 +17,8 @@ sig
   val cotmatrix_entries         : Vertex Seq.t -> Face Seq.t -> (real * real * real) Seq.t
   val cotmatrix_triplet         : Vertex Seq.t -> Face Seq.t -> ((int * int) * real) Seq.t
   val cotmatrix                 : Vertex Seq.t -> Face Seq.t -> MatCoo
-  val iteration_step            : Vertex Seq.t -> Face Seq.t -> real -> Vec Seq.t
+  val iteration_preps           : Vertex Seq.t -> Face Seq.t -> (MatCoo * real Seq.t)
+  val iteration_step            : Vertex Seq.t -> MatCoo -> real Seq.t -> Vec Seq.t
 
 end =
 struct
@@ -291,11 +292,19 @@ struct
       }
     end
 
-  fun iteration_step  v f dt =
+  fun iteration_preps v f =
     let 
       val nv = Seq.length v
       val cotmat = cotmatrix v f
-      val mass = mass v f
+      val weight = ForkJoin.alloc nv
+    in 
+      Parallel.parforg 128 (0, nv) (fn i => Array.update (weight, i, 1.0));
+      (cotmat, M.mxv cotmat (ArraySlice.full weight))
+    end
+
+  fun iteration_step v cotmat weight =
+    let 
+      val nv = Seq.length v
       val vx = Seq.map (fn (x, _, _) => x) v
       val xx = M.mxv cotmat vx
       val vy = Seq.map (fn (_, y, _) => y) v
@@ -304,7 +313,7 @@ struct
       val zz = M.mxv cotmat vz
     in 
       ArraySlice.full (SeqBasis.tabulate 256 (0, nv) (fn i => 
-        Vector.scale ( (Seq.nth xx i), (Seq.nth yy i), (Seq.nth zz i) ) (dt / Seq.nth mass i)
+        Vector.scale ( (Seq.nth xx i), (Seq.nth yy i), (Seq.nth zz i) ) (1.0 / Seq.nth weight i)
         )
       )
     end

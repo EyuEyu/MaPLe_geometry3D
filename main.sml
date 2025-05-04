@@ -16,7 +16,8 @@ val _ =
     val iter = MGL.iteration_step v f 0.001
     *)
 
-    val _ = Benchmark.run (fn _ => MGL.iteration_step v f 0.001) 
+    val (cotmat, weight) = MGL.iteration_preps v f 
+    val _ = Benchmark.run (fn _ => MGL.iteration_step v cotmat weight) 
     
 
   in
