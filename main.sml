@@ -13,10 +13,10 @@ val _ =
     val mass_atomic = MGL.mass_atomic v f
     val ce = MGL.cotmatrix_entries v f
     val cot = MGL.cotmatrix v f
-    val iter = MGL.iteration_step v f
+    val iter = MGL.iteration_step v f 0.001
     *)
 
-    val _ = Benchmark.run (fn _ => MGL.iteration_step v f) 
+    val _ = Benchmark.run (fn _ => MGL.iteration_step v f 0.001) 
     
 
   in

@@ -17,7 +17,7 @@ sig
   val cotmatrix_entries         : Vertex Seq.t -> Face Seq.t -> (real * real * real) Seq.t
   val cotmatrix_triplet         : Vertex Seq.t -> Face Seq.t -> ((int * int) * real) Seq.t
   val cotmatrix                 : Vertex Seq.t -> Face Seq.t -> MatCoo
-  val iteration_step            : Vertex Seq.t -> Face Seq.t -> Vec Seq.t
+  val iteration_step            : Vertex Seq.t -> Face Seq.t -> real -> Vec Seq.t
 
 end =
 struct
@@ -291,7 +291,7 @@ struct
       }
     end
 
-  fun iteration_step  v f =
+  fun iteration_step  v f dt =
     let 
       val nv = Seq.length v
       val cotmat = cotmatrix v f
@@ -304,7 +304,7 @@ struct
       val zz = M.mxv cotmat vz
     in 
       ArraySlice.full (SeqBasis.tabulate 256 (0, nv) (fn i => 
-        Vector.scale ( (Seq.nth xx i), (Seq.nth yy i), (Seq.nth zz i) ) (1.0 / Seq.nth mass i)
+        Vector.scale ( (Seq.nth xx i), (Seq.nth yy i), (Seq.nth zz i) ) (dt / Seq.nth mass i)
         )
       )
     end
