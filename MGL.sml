@@ -1,9 +1,13 @@
 structure MGL:
 sig
+  structure M : sig
+    type t
+  end
+
   type Vertex = Geometry3D.Vertex
   type Face = Geometry3D.Face
   type Vec = Geometry3D.Vector.t
-  type MatCoo = int Seq.t * int Seq.t * real Seq.t
+  type MatCoo = M.t
 
   val per_face_normals          : Vertex Seq.t -> Face Seq.t -> Vec Seq.t
   val per_vertex_normals        : Vertex Seq.t -> Face Seq.t -> Vec Seq.t
@@ -11,18 +15,23 @@ sig
   val mass                      : Vertex Seq.t -> Face Seq.t -> real Seq.t
   val mass_atomic               : Vertex Seq.t -> Face Seq.t -> real Seq.t
   val cotmatrix_entries         : Vertex Seq.t -> Face Seq.t -> (real * real * real) Seq.t
-  val cot_triplet_array         : Vertex Seq.t -> Face Seq.t -> ((int * int) * real) Seq.t
+  val cotmatrix_triplet         : Vertex Seq.t -> Face Seq.t -> ((int * int) * real) Seq.t
   val cotmatrix                 : Vertex Seq.t -> Face Seq.t -> MatCoo
+  val iteration_preps           : Vertex Seq.t -> Face Seq.t -> (MatCoo * real Seq.t)
+  val iteration_step            : Vertex Seq.t -> MatCoo -> real Seq.t -> Vec Seq.t
 
 end =
 struct
+
+  structure Vector = Geometry3D.Vector
+  structure M = MatCOO(structure I = Int
+                       structure R = Real)
 
   type Vertex = Geometry3D.Vertex
   type Face = Geometry3D.Face
   type Vec = Geometry3D.Vector.t
   type MatCoo = int Seq.t * int Seq.t * real Seq.t
-
-  structure Vector = Geometry3D.Vector
+  type MatCoo = M.t
 
   fun loop i stop acc f = 
     if i >= stop then acc
@@ -76,7 +85,7 @@ struct
         end
 
     in
-      ArraySlice.full (SeqBasis.tabulate 5 (0, n) (fn i => do_face_normals i v f))
+      ArraySlice.full (SeqBasis.tabulate 256 (0, n) (fn i => do_face_normals i v f))
     end
 
   fun per_vertex_normals v f =
@@ -102,7 +111,7 @@ struct
         end
 
     in
-      ArraySlice.full (SeqBasis.tabulate 5 (0, n) (fn i => do_vertex_normal i v f face_normals))
+      ArraySlice.full (SeqBasis.tabulate 128 (0, n) (fn i => do_vertex_normal i v f face_normals))
     end
   
   fun per_vertex_normals_atomic v f = 
@@ -169,8 +178,8 @@ struct
       val nf = Seq.length f
       val result = ForkJoin.alloc nv
     in
-      Parallel.parfor (0, nv) (fn i => Array.update (result, i, 0.0)); 
-      Parallel.parfor (0, nf) (fn i =>
+      Parallel.parforg 32 (0, nv) (fn i => Array.update (result, i, 0.0)); 
+      Parallel.parforg 32 (0, nf) (fn i =>
         let
           val (i1, i2, i3) = Seq.nth f i
           val v1 = Seq.nth v i1
@@ -203,12 +212,11 @@ struct
             Vector.cotangent (Vector.sub v1 v3) (Vector.sub v2 v3)
           )
         end
-
     in
       ArraySlice.full (SeqBasis.tabulate 256 (0, n) (fn i => do_face_cot i v f))
     end
   
-  fun cot_triplet_array v f =
+  fun cotmatrix_triplet  v f =
     let 
       val ce = cotmatrix_entries v f
       val nf = Seq.length f
@@ -256,13 +264,14 @@ struct
 
   fun cotmatrix v f = 
     let 
-      val cot_array = cot_triplet_array v f
+      val cot_array = cotmatrix_triplet v f
+      val nv = Seq.length v
       val n = Seq.length cot_array
       val i_seq = ForkJoin.alloc n
       val j_seq = ForkJoin.alloc n
       val v_seq = ForkJoin.alloc n
     in
-      Parallel.parfor (0, n) (fn k => 
+      Parallel.parforg 128 (0, n) (fn k => 
         let
           val triplet = Seq.nth cot_array k
           val (i, j) = #1 triplet
@@ -274,7 +283,39 @@ struct
         end
       );
 
-      (ArraySlice.full i_seq, ArraySlice.full j_seq, ArraySlice.full v_seq)
+      M.Mat {
+      width = nv,
+      height = nv,
+      row_indices = ArraySlice.full i_seq,
+      col_indices = ArraySlice.full j_seq,
+      values = ArraySlice.full v_seq
+      }
+    end
+
+  fun iteration_preps v f =
+    let 
+      val nv = Seq.length v
+      val cotmat = cotmatrix v f
+      val weight = ForkJoin.alloc nv
+    in 
+      Parallel.parforg 128 (0, nv) (fn i => Array.update (weight, i, 1.0));
+      (cotmat, M.mxv cotmat (ArraySlice.full weight))
+    end
+
+  fun iteration_step v cotmat weight =
+    let 
+      val nv = Seq.length v
+      val vx = Seq.map (fn (x, _, _) => x) v
+      val xx = M.mxv cotmat vx
+      val vy = Seq.map (fn (_, y, _) => y) v
+      val yy = M.mxv cotmat vy
+      val vz = Seq.map (fn (_, _, z) => z) v
+      val zz = M.mxv cotmat vz
+    in 
+      ArraySlice.full (SeqBasis.tabulate 256 (0, nv) (fn i => 
+        Vector.scale ( (Seq.nth xx i), (Seq.nth yy i), (Seq.nth zz i) ) (1.0 / Seq.nth weight i)
+        )
+      )
     end
 
 end

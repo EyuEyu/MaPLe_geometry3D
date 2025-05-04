@@ -96,3 +96,6 @@ fun mass_seq v f =
 
       ArraySlice.full arr_triplet
     end
+
+
+    (Seq.nth xx i / Seq.nth mass i), (Seq.nth yy i / Seq.nth mass i), (Seq.nth zz i / Seq.nth mass i))
