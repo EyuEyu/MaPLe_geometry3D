@@ -243,18 +243,16 @@ struct
         in
           Hashtable.insert_combine ht ((v1, v2), c3) Real.+;
           Hashtable.insert_combine ht ((v2, v1), c3) Real.+;
-          Hashtable.insert_combine ht ((v1, v1), ~c3) Real.+;
-          Hashtable.insert_combine ht ((v2, v2), ~c3) Real.+;
 
           Hashtable.insert_combine ht ((v2, v3), c1) Real.+;
           Hashtable.insert_combine ht ((v3, v2), c1) Real.+;
-          Hashtable.insert_combine ht ((v2, v2), ~c1) Real.+;
-          Hashtable.insert_combine ht ((v3, v3), ~c1) Real.+;
 
           Hashtable.insert_combine ht ((v3, v1), c2) Real.+;
           Hashtable.insert_combine ht ((v1, v3), c2) Real.+;
-          Hashtable.insert_combine ht ((v3, v3), ~c2) Real.+;
-          Hashtable.insert_combine ht ((v1, v1), ~c2) Real.+
+
+          Hashtable.insert_combine ht ((v1, v1), ~c3 - c2) Real.+;
+          Hashtable.insert_combine ht ((v2, v2), ~c3 - c1) Real.+;
+          Hashtable.insert_combine ht ((v3, v3), ~c1 - c2) Real.+
         end
       );      
 
